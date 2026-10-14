@@ -134,16 +134,21 @@ export async function destroySession(request, env) {
 /* ── admin authorization (server-side gate for every admin action) ── */
 export async function requireAdmin(request, env, body) {
   const rlKey = `admin:${clientIp(request)}`;
-  if (!(await rateAllowed(env, rlKey, 10))) {
-    return { ok: false, status: 429, error: 'Too many failed attempts. Try again in a few minutes.' };
-  }
-  const provided = body?.admin_key || request.headers.get('x-admin-key') || '';
-  const master = env.ADMIN_KEY || '';
-  if (master && provided && constantTimeEqual(String(provided), String(master))) return { ok: true, via: 'master_key' };
+  const provided = String(body?.admin_key || request.headers.get('x-admin-key') || '').trim();
+  const master = String(env.ADMIN_KEY || '').trim();
+
+  // Block repeated failures (best effort — a missing table must never lock the owner out)
+  let allowed = true;
+  try { allowed = await rateAllowed(env, rlKey, 10); } catch { allowed = true; }
+  if (!allowed) return { ok: false, status: 429, error: 'Too many failed attempts. Try again in a few minutes.' };
+
+  if (master && provided && constantTimeEqual(provided, master)) return { ok: true, via: 'master_key' };
   // Fallback: a signed-in session belonging to the owner account.
-  const user = await getSessionUser(request, env);
-  if (user && user.username_lower === 'keyy') return { ok: true, via: 'owner_session' };
-  await rateHit(env, rlKey, 15 * 60);
+  try {
+    const user = await getSessionUser(request, env);
+    if (user && user.username_lower === 'keyy') return { ok: true, via: 'owner_session' };
+  } catch { /* DB not ready — fall through to the failure below */ }
+  try { await rateHit(env, rlKey, 15 * 60); } catch { /* ignore */ }
   return { ok: false, status: 403, error: !master ? 'ADMIN_KEY secret is not configured on this deployment.' : 'Forbidden — admin authorization required.' };
 }
 
