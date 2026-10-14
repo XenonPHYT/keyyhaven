@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join Keyy's Haven — Registration &amp; Sign in</title>
+<meta name="description" content="Register for Keyy's Haven — username, password, secret question and a 6-digit recovery PIN.">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="/media/avatar.webp">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="seal" viewBox="0 0 24 24">
+    <path fill="var(--verified-blue)" d="M12.0 0.8 L14.38 3.11 L17.6 2.3 L18.51 5.49 L21.7 6.4 L20.89 9.62 L23.2 12.0 L20.89 14.38 L21.7 17.6 L18.51 18.51 L17.6 21.7 L14.38 20.89 L12.0 23.2 L9.62 20.89 L6.4 21.7 L5.49 18.51 L2.3 17.6 L3.11 14.38 L0.8 12.0 L3.11 9.62 L2.3 6.4 L5.49 5.49 L6.4 2.3 L9.62 3.11 Z"/>
+    <path fill="#ffffff" d="M10.6 15.9 L7.2 12.5 L8.6 11.1 L10.6 13.1 L15.4 8.3 L16.8 9.7 Z"/>
+  </symbol>
+</svg>
+
+<main class="auth-shell">
+  <div class="auth-panel">
+    <div class="auth-brand">
+      <img src="/media/avatar.webp" alt="Keyy's Haven avatar" width="64" height="64">
+      <h1>Keyy's Haven <svg class="seal" width="21" height="21"><use href="#seal"/></svg></h1>
+    </div>
+
+    <div class="auth-tabs card card-pad" role="tablist" style="padding:8px;">
+      <button class="btn ghost" id="tab-register" aria-selected="true" role="tab">Create account</button>
+      <button class="btn ghost" id="tab-login" aria-selected="false" role="tab">Sign in</button>
+      <button class="btn ghost" id="tab-recover" aria-selected="false" role="tab">Reset PIN</button>
+    </div>
+
+    <!-- Registration: Username, Password, Secret Question + Answer, 6-Digit Recovery PIN -->
+    <section class="card card-pad" id="pane-register" role="tabpanel">
+      <form class="form-grid" id="register-form" autocomplete="off">
+        <div class="field">
+          <label for="reg-username">Username</label>
+          <input id="reg-username" type="text" minlength="3" maxlength="24" pattern="[A-Za-z0-9_]{3,24}" placeholder="e.g. star_watcher" required>
+        </div>
+        <div class="field">
+          <label for="reg-password">Password (min 8 characters)</label>
+          <input id="reg-password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required>
+        </div>
+        <div class="field">
+          <label for="reg-question">Secret question</label>
+          <input id="reg-question" type="text" maxlength="200" placeholder="e.g. What is my favourite constellation?" required>
+        </div>
+        <div class="field">
+          <label for="reg-answer">Secret answer</label>
+          <input id="reg-answer" type="text" maxlength="200" required>
+        </div>
+        <div class="field">
+          <label for="reg-pin">6-digit recovery PIN</label>
+          <div class="pin-wrap"><input id="reg-pin" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" placeholder="••••••" required></div>
+          <span class="hint">Stored hashed. If you ever forget your password, the admin can verify you and reset access.</span>
+        </div>
+        <p class="form-msg" id="reg-msg" role="status"></p>
+        <button class="btn" type="submit" id="reg-submit">Register &amp; enter the Haven</button>
+      </form>
+    </section>
+
+    <!-- Login -->
+    <section class="card card-pad" id="pane-login" role="tabpanel" hidden>
+      <form class="form-grid" id="login-form">
+        <div class="field">
+          <label for="log-username">Username</label>
+          <input id="log-username" type="text" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="log-password">Password</label>
+          <input id="log-password" type="password" autocomplete="current-password" required>
+        </div>
+        <p class="form-msg" id="log-msg" role="status"></p>
+        <button class="btn" type="submit" id="log-submit">Sign in</button>
+      </form>
+    </section>
+
+    <!-- Self-service PIN reset via secret answer (admins can also force-reset PINs) -->
+    <section class="card card-pad" id="pane-recover" role="tabpanel" hidden>
+      <form class="form-grid" id="recover-form">
+        <div class="field">
+          <label for="rec-username">Username</label>
+          <input id="rec-username" type="text" required>
+        </div>
+        <div class="field">
+          <label for="rec-answer">Secret answer</label>
+          <input id="rec-answer" type="text" required>
+        </div>
+        <div class="field">
+          <label for="rec-pin">New 6-digit PIN</label>
+          <div class="pin-wrap"><input id="rec-pin" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required></div>
+        </div>
+        <p class="form-msg" id="rec-msg" role="status"></p>
+        <button class="btn" type="submit" id="rec-submit">Reset recovery PIN</button>
+      </form>
+    </section>
+
+    <p class="mini-note" style="text-align:center">
+      <a href="/">← Back to the timeline</a><br>
+      Your internal identity stays private: the platform never shows account IDs or tokens in public views.
+    </p>
+  </div>
+</main>
+
+<script type="module">
+const $ = (sel) => document.querySelector(sel);
+const msg = (el, text, cls) => { el.textContent = text; el.className = 'form-msg' + (cls ? ' ' + cls : ''); };
+
+const panes = { register: $('#pane-register'), login: $('#pane-login'), recover: $('#pane-recover') };
+const tabs = { register: $('#tab-register'), login: $('#tab-login'), recover: $('#tab-recover') };
+for (const key of Object.keys(panes)) {
+  tabs[key].addEventListener('click', () => {
+    for (const k of Object.keys(panes)) {
+      panes[k].hidden = k !== key;
+      tabs[k].setAttribute('aria-selected', String(k === key));
+    }
+  });
+}
+
+async function api(action, payload) {
+  const res = await fetch('/api?action=' + encodeURIComponent(action), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...payload }),
+    credentials: 'same-origin'
+  });
+  return res.json();
+}
+
+$('#register-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const out = $('#reg-msg'); msg(out, 'Creating your account…');
+  $('#reg-submit').disabled = true;
+  const pin = $('#reg-pin').value.trim();
+  if (!/^\d{6}$/.test(pin)) { msg(out, 'The recovery PIN must be exactly 6 digits.', 'error'); $('#reg-submit').disabled = false; return; }
+  const r = await api('register', {
+    username: $('#reg-username').value.trim(),
+    password: $('#reg-password').value,
+    secret_question: $('#reg-question').value.trim(),
+    secret_answer: $('#reg-answer').value.trim(),
+    pin
+  });
+  $('#reg-submit').disabled = false;
+  if (r.ok) { msg(out, 'Welcome to the Haven! Redirecting to the timeline…', 'success'); setTimeout(() => location.href = '/', 900); }
+  else msg(out, r.error || 'Registration failed.', 'error');
+});
+
+$('#login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const out = $('#log-msg'); msg(out, 'Signing in…');
+  $('#log-submit').disabled = true;
+  const r = await api('login', { username: $('#log-username').value.trim(), password: $('#log-password').value });
+  $('#log-submit').disabled = false;
+  if (r.ok) { msg(out, 'Signed in. Redirecting…', 'success'); setTimeout(() => location.href = '/', 700); }
+  else msg(out, r.error || 'Sign in failed.', 'error');
+});
+
+$('#recover-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const out = $('#rec-msg'); msg(out, 'Verifying your secret answer…');
+  $('#rec-submit').disabled = true;
+  const r = await api('recover_pin', {
+    username: $('#rec-username').value.trim(),
+    secret_answer: $('#rec-answer').value.trim(),
+    new_pin: $('#rec-pin').value.trim()
+  });
+  $('#rec-submit').disabled = false;
+  if (r.ok) msg(out, r.message || 'Recovery PIN reset.', 'success');
+  else msg(out, r.error || 'Verification failed.', 'error');
+});
+</script>
+</body>
+</html>
