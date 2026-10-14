@@ -138,12 +138,18 @@ function toast(text) {
 }
 
 async function api(action, payload = {}) {
-  const res = await fetch('/api?action=' + encodeURIComponent(action), {
-    method: 'POST', credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, admin_key: ADMIN_KEY, ...payload })
-  });
-  return res.json();
+  try {
+    const res = await fetch('/api?action=' + encodeURIComponent(action), {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, admin_key: ADMIN_KEY, ...payload })
+    });
+    const text = await res.text();
+    try { return JSON.parse(text); }
+    catch { return { ok: false, error: 'Server error ' + res.status + ': ' + text.slice(0, 200) }; }
+  } catch (e) {
+    return { ok: false, error: 'Network error: ' + e.message };
+  }
 }
 
 /* Tabs */
@@ -158,7 +164,7 @@ for (const btn of document.querySelectorAll('.admin-tabs .btn')) {
 /* ── Gate ── */
 $('#gate-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  ADMIN_KEY = $('#gate-key').value;
+  ADMIN_KEY = $('#gate-key').value.trim();
   const r = await api('admin_auth');
   if (!r.ok) { $('#gate-msg').textContent = r.error || 'Invalid admin key.'; $('#gate-msg').className = 'form-msg error'; return; }
   sessionStorage.setItem(KEY_STORAGE, ADMIN_KEY);
