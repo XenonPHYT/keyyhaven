@@ -1,0 +1,16 @@
+{
+  "name": "keyys-haven",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Keyy's Haven — high-performance social timeline engine on Cloudflare Workers + D1 + R2",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute keyys-haven-db --remote --file=schema.sql",
+    "db:init:local": "wrangler d1 execute keyys-haven-db --local --file=schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keyy's Haven — Official Timeline</title>
+<meta name="description" content="The centralized broadcast feed of Keyy — streams, updates and the official timeline of the Haven.">
+<meta property="og:title" content="Keyy's Haven — Official Timeline">
+<meta property="og:image" content="/media/banner.webp">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="/media/avatar.webp">
+</head>
+<body>
+<!-- Inline SVG symbol: the radiant verified seal (single source of truth for the check-mark badge) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="seal" viewBox="0 0 24 24">
+    <path fill="var(--verified-blue)" d="M12.0 0.8 L14.38 3.11 L17.6 2.3 L18.51 5.49 L21.7 6.4 L20.89 9.62 L23.2 12.0 L20.89 14.38 L21.7 17.6 L18.51 18.51 L17.6 21.7 L14.38 20.89 L12.0 23.2 L9.62 20.89 L6.4 21.7 L5.49 18.51 L2.3 17.6 L3.11 14.38 L0.8 12.0 L3.11 9.62 L2.3 6.4 L5.49 5.49 L6.4 2.3 L9.62 3.11 Z"/>
+    <path fill="#ffffff" d="M10.6 15.9 L7.2 12.5 L8.6 11.1 L10.6 13.1 L15.4 8.3 L16.8 9.7 Z"/>
+  </symbol>
+</svg>
+
+<!-- ─── Header module: sticky profile navigation banner ─── -->
+<header class="haven-header">
+  <div class="header-banner">
+    <img src="/media/banner.webp" alt="Keyy's Haven banner" fetchpriority="high">
+  </div>
+  <div class="header-bar">
+    <div class="avatar-wrap">
+      <img src="/media/avatar.webp" alt="Keyy avatar" width="128" height="128">
+      <svg class="avatar-badge" role="img" aria-label="Verified"><use href="#seal"/></svg>
+    </div>
+    <div class="identity-block">
+      <div class="identity-name">Keyy Haven Official <svg class="seal" role="img" aria-label="Verified"><use href="#seal"/></svg></div>
+      <div class="identity-sub">@keyy · The Haven broadcast hub — streams, drops &amp; updates</div>
+      <div style="margin-top:8px"><span class="live-indicator" id="live-indicator"><span class="dot"></span><span id="live-label">Offline</span></span></div>
+    </div>
+    <nav class="header-nav" aria-label="Main navigation">
+      <a class="nav-chip primary" href="/public/registration.html" id="nav-auth">Join the Haven</a>
+      <a class="nav-chip ghost" href="#timeline">Timeline</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ─── Content pipeline: 360px rail + fluid feed ─── -->
+<main class="haven-shell">
+  <aside class="profile-rail">
+    <section class="card card-pad">
+      <h3>About the Haven</h3>
+      <div class="bio-list">
+        <div><b>Role</b> · Creator &amp; Owner</div>
+        <div><b>Status</b> · <span id="rail-live">Offline</span></div>
+        <div><b>Interactions</b> · Comments + single-pass emoji reactions</div>
+        <div><b>Privacy</b> · Internal IDs never shown in public views</div>
+      </div>
+    </section>
+    <section class="card card-pad">
+      <h3>Community pulse</h3>
+      <div class="stat-row">
+        <div class="stat"><b id="stat-posts">–</b><span>Posts</span></div>
+        <div class="stat"><b id="stat-comments">–</b><span>Comments</span></div>
+        <div class="stat"><b id="stat-members">–</b><span>Members</span></div>
+      </div>
+    </section>
+    <section class="card card-pad auth-card" id="auth-card">
+      <!-- Filled by JS: quick sign-in / session state -->
+    </section>
+    <section class="card card-pad">
+      <h3>Sharing, masked</h3>
+      <p class="mini-note">Tap <b>Share</b> on any post: your footprint stays hidden, a short-lived cryptographic hash is minted and the masked link lands on your clipboard. Links expire automatically.</p>
+    </section>
+  </aside>
+
+  <section class="feed-stream" id="timeline" aria-live="polite">
+    <div class="feed-head">
+      <h2>Timeline</h2>
+      <span class="feed-meta" id="feed-meta">Loading…</span>
+    </div>
+    <div id="feed"></div>
+  </section>
+</main>
+
+<footer class="haven-footer">Keyy's Haven — built on vanilla HTML, native CSS &amp; Cloudflare Pages Functions. Comments and reactions are the community's voice; the timeline speaks with Keyy's.</footer>
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module">
+const EMOJIS = ['👍', '❤️', '🔥', '😂', '😮'];
+const $ = (s) => document.querySelector(s);
+let ME = null;
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const seal = (on) => on ? ' <svg class="seal" role="img" aria-label="Verified"><use href="#seal"/></svg>' : '';
+
+async function api(action, payload, method) {
+  const opts = { credentials: 'same-origin', headers: {} };
+  if (method === 'GET') { opts.method = 'GET'; }
+  else { opts.method = 'POST'; opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify({ action, ...(payload || {}) }); }
+  const res = await fetch('/api?action=' + encodeURIComponent(action), opts);
+  return res.json();
+}
+
+function toast(text) {
+  const t = $('#toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+function timeAgo(iso) {
+  const s = Math.max(1, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return Math.floor(s) + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+function setLive(on) {
+  $('#live-indicator').classList.toggle('is-live', !!on);
+  $('#live-label').textContent = on ? 'LIVE' : 'Offline';
+  $('#rail-live').textContent = on ? 'Streaming now' : 'Offline';
+}
+
+function renderAuthCard() {
+  const card = $('#auth-card');
+  const nav = $('#nav-auth');
+  if (ME) {
+    nav.textContent = 'Sign out';
+    nav.onclick = async (e) => { e.preventDefault(); await api('logout'); location.reload(); };
+    card.innerHTML = `
+      <h3>Your session</h3>
+      <p>Signed in as <b>${esc(ME.username)}</b>${ME.is_verified ? seal(true) : ''}</p>
+      <a class="nav-chip" href="/user=${encodeURIComponent(ME.username)}/ID=session">Private token node →</a>
+      <p class="mini-note">The private token node re-discloses your hidden verification token only inside this authenticated session. Your internal ID is never rendered anywhere public.</p>`;
+  } else {
+    nav.textContent = 'Join the Haven';
+    nav.onclick = null;
+    card.innerHTML = `
+      <h3>Quick sign in</h3>
+      <div class="field"><input id="q-user" type="text" placeholder="Username" autocomplete="username"></div>
+      <div class="field"><input id="q-pass" type="password" placeholder="Password" autocomplete="current-password"></div>
+      <button class="btn" id="q-btn">Sign in</button>
+      <p class="mini-note">New here? <a href="/public/registration.html">Create an account</a> — you'll pick a secret question and a 6-digit recovery PIN.</p>
+      <p class="form-msg" id="q-msg"></p>`;
+    $('#q-btn').addEventListener('click', async () => {
+      const msg = $('#q-msg');
+      msg.textContent = 'Signing in…'; msg.className = 'form-msg';
+      const r = await api('login', { username: $('#q-user').value.trim(), password: $('#q-pass').value });
+      if (r.ok) location.reload();
+      else { msg.textContent = r.error || 'Sign in failed.'; msg.className = 'form-msg error'; }
+    });
+  }
+}
+
+function postHtml(p) {
+  const reactions = EMOJIS.map((e) => {
+    const c = p.reactions[e] || 0;
+    return `<button class="reaction-btn${p.mine === e ? ' mine' : ''}" data-post="${p.id}" data-emoji="${e}" aria-label="React ${e}">${e}${c ? ' ' + c : ''}</button>`;
+  }).join('');
+  const media = (p.media || []).map((m) => `<img src="${esc(m)}" alt="Post media" loading="lazy">`).join('');
+  const comments = p.comments.map((c) => `
+    <div class="comment">
+      <div class="comment-avatar">${esc(c.username.slice(0, 1).toUpperCase())}</div>
+      <div class="comment-main">
+        <div class="comment-bubble">
+          <span class="comment-author">${esc(c.username)}${seal(c.verified)}</span><br>${esc(c.body)}
+        </div>
+        <div class="comment-time">${timeAgo(c.created_at)}</div>
+      </div>
+    </div>`).join('');
+  const composer = ME
+    ? `<form class="comment-form" data-post="${p.id}">
+         <input type="text" maxlength="500" placeholder="Write a comment…" aria-label="Write a comment" required>
+         <button class="btn small" type="submit">Send</button>
+       </form>`
+    : `<p class="signin-nudge"><a href="/public/registration.html">Sign in</a> to comment and react.</p>`;
+  return `
+  <article class="post-card${p.pinned ? ' is-pinned' : ''}" data-post="${p.id}">
+    <div class="post-head">
+      <img class="post-avatar" src="/media/avatar.webp" alt="" width="46" height="46">
+      <div class="post-id">
+        <div class="post-author">${esc(p.author_name)}${seal(true)}</div>
+        <div class="post-meta"><span>${timeAgo(p.created_at)}</span>${p.pinned ? '<span class="pinned-flag">📌 Pinned</span>' : ''}</div>
+      </div>
+    </div>
+    <div class="post-body">${esc(p.body)}</div>
+    ${media ? `<div class="post-media">${media}</div>` : ''}
+    <div class="post-actions">
+      ${reactions}
+      <button class="share-btn" data-post="${p.id}">🔗 Share</button>
+    </div>
+    <div class="comments-block">
+      ${comments}
+      ${composer}
+    </div>
+  </article>`;
+}
+
+function bindFeedEvents() {
+  document.querySelectorAll('.reaction-btn').forEach((b) => b.addEventListener('click', async () => {
+    if (!ME) return toast('Sign in to react — it is one tap, one emoji.');
+    b.disabled = true;
+    const r = await api('react', { post_id: Number(b.dataset.post), emoji: b.dataset.emoji });
+    b.disabled = false;
+    if (!r.ok) return toast(r.error || 'Reaction failed.');
+    loadFeed();
+  }));
+  document.querySelectorAll('.comment-form').forEach((f) => f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = f.querySelector('input');
+    const body = input.value.trim();
+    if (!body) return;
+    const btn = f.querySelector('button'); btn.disabled = true;
+    const r = await api('comment', { post_id: Number(f.dataset.post), body });
+    btn.disabled = false;
+    if (!r.ok) return toast(r.error || 'Comment failed.');
+    loadFeed();
+  }));
+  document.querySelectorAll('.share-btn').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const r = await api('share_create', { post_id: Number(b.dataset.post) });
+    b.disabled = false;
+    if (!r.ok) return toast(r.error || 'Could not mint a share link.');
+    const url = location.origin + r.path;
+    try { await navigator.clipboard.writeText(url); }
+    catch { const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+    b.classList.add('copied'); b.textContent = '✓ Masked link copied';
+    setTimeout(() => { b.classList.remove('copied'); b.textContent = '🔗 Share'; }, 2400);
+  }));
+}
+
+async function loadFeed() {
+  const r = await api('get_posts', null, 'GET');
+  const feed = $('#feed');
+  if (!r.ok) { $('#feed-meta').textContent = 'Timeline unavailable.'; return; }
+  ME = r.me || null;
+  $('#feed-meta').textContent = r.posts.length + ' broadcast' + (r.posts.length === 1 ? '' : 's');
+  $('#stat-posts').textContent = r.stats.posts;
+  $('#stat-comments').textContent = r.stats.comments;
+  $('#stat-members').textContent = r.stats.members;
+  setLive(r.live);
+  feed.innerHTML = r.posts.map(postHtml).join('') || '<p class="mini-note">No broadcasts yet.</p>';
+  renderAuthCard();
+  bindFeedEvents();
+}
+
+(async function init() {
+  try { const s = await api('site_state', null, 'GET'); if (s.ok) { setLive(s.live); ME = s.me || null; } } catch {}
+  await loadFeed();
+  setInterval(async () => { try { const s = await api('site_state', null, 'GET'); if (s.ok) setLive(s.live); } catch {} }, 60000);
+})();
+</script>
+</body>
+</html>
