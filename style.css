@@ -235,3 +235,6 @@ textarea { resize: vertical; min-height: 96px; }
 @media (min-width: 1800px) {
     .haven-shell, .admin-shell { max-width: 1320px; }
 }
+
+/* Make the HTML hidden attribute always win (gate/console switch relies on it) */
+[hidden] { display: none !important; }
