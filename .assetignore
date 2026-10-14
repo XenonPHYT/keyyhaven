@@ -1,0 +1,17 @@
+.git
+.github
+.gitignore
+.dev.vars
+node_modules
+functions
+src
+wrangler.jsonc
+wrangler.toml
+package.json
+package-lock.json
+bun.lock
+bun.lockb
+schema.sql
+migration-rate-limits.sql
+README.md
+.assetsignore
