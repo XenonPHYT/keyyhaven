@@ -11,16 +11,9 @@ import {
   createSession, sessionCookie, clearSessionCookie,
   getSessionUser, destroySession,
   requireAdmin, getSetting, setSetting,
-  validateRegistration, analyzeComment, REACTIONS, RESERVED_USERNAMES,
+  validateRegistration, analyzeComment, REACTIONS,
 } from './data.js';
 import { loadFeed, loadStats, liveState } from './feed.js';
-
-const INVITE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const normalizeInvite = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-function makeInviteCode() {
-  const chars = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => INVITE_ALPHABET[b % 32]).join('');
-  return chars.replace(/(.{4})(?=.)/g, '$1-'); // XXXX-XXXX-XXXX
-}
 
 const isHttps = (request) => new URL(request.url).protocol === 'https:';
 
@@ -37,7 +30,7 @@ export async function onRequestGet(context) {
   const me = await getSessionUser(request, env);
 
   if (action === 'site_state') {
-    return json({ ok: true, live: await liveState(env), me: me ? publicIdentity(me) : null });
+    return json({ ok: true, live: await liveState(env), me: await identityWithStatus(env, me) });
   }
 
   if (action === 'get_posts') {
@@ -45,7 +38,7 @@ export async function onRequestGet(context) {
     return json({
       ok: true,
       live,
-      me: me ? publicIdentity(me) : null,
+      me: await identityWithStatus(env, me),
       stats: { posts: stats.posts, comments: stats.comments, members: stats.members, flagged: stats.flagged },
       posts,
     });
@@ -58,6 +51,20 @@ function publicIdentity(user) {
   // Public DOM surface: plaintext username + verification state only.
   // Internal UUIDs and private tokens are NEVER included here.
   return { username: user.username, is_verified: Number(user.is_verified) };
+}
+
+/** Identity for the signed-in viewer, plus their own verification-request status. */
+async function identityWithStatus(env, user) {
+  if (!user) return null;
+  const me = publicIdentity(user);
+  me.verification = 'none';
+  if (!me.is_verified) {
+    try {
+      const row = await env.DB.prepare('SELECT status FROM verification_requests WHERE user_id = ?1').bind(user.id).first();
+      if (row && row.status !== 'approved') me.verification = row.status; // 'pending' | 'denied'
+    } catch { /* table not created yet */ }
+  }
+  return me;
 }
 
 /* ══════════════════════════ POST actions ═════════════════════════ */
@@ -76,6 +83,7 @@ export async function onRequestPost(context) {
     case 'comment':     return comment(env, request, body);
     case 'react':       return react(env, request, body);
     case 'share_create': return shareCreate(env, request, body);
+    case 'request_verification': return requestVerification(env, request, body);
 
     /* ── admin console + webhooks (server-side gated) ── */
     case 'admin_auth':
@@ -84,9 +92,8 @@ export async function onRequestPost(context) {
     case 'admin_reset_pin':
     case 'admin_reveal_token':
     case 'admin_provision_keyy':
-    case 'admin_invite_create':
-    case 'admin_invite_list':
-    case 'admin_invite_revoke':
+    case 'admin_verification_list':
+    case 'admin_verification_decide':
     case 'admin_flagged':
     case 'admin_delete_comment':
     case 'admin_publish':
@@ -112,34 +119,12 @@ async function register(env, request, body) {
   const exists = await env.DB.prepare('SELECT 1 FROM users WHERE username_lower = ?1').bind(username.toLowerCase()).first();
   if (exists) return json({ ok: false, error: 'That username is already part of the Haven.' }, 409);
 
-  // Reserved handle? Only the person holding the admin-issued invite code may register it,
-  // and that account is created verified.
-  const lower = username.toLowerCase();
-  let invite = null;
-  try { invite = await env.DB.prepare('SELECT * FROM verified_invites WHERE handle_lower = ?1').bind(lower).first(); } catch { invite = null; }
-  let verified = 0;
-  if (invite) {
-    const rlKey = `invite:${clientIp(request)}:${lower}`;
-    if (!(await rateAllowed(env, rlKey, 5))) return json({ ok: false, error: 'Too many attempts. Try again later.' }, 429);
-    const code = normalizeInvite(body.invite_code);
-    if (!code || !(await verifySecret(code, invite.code_hash))) {
-      await rateHit(env, rlKey, 60 * 60);
-      return json({ ok: false, error: 'This username is reserved. Enter the invite code from the admin, or choose another username.' }, 403);
-    }
-    verified = 1;
-  }
-
   const id = uuid();
   const privateToken = randomToken(32); // opaque hidden token
-  const insertUser = env.DB.prepare(
+  await env.DB.prepare(
     `INSERT INTO users (id, username, username_lower, password_hash, secret_question, secret_answer_hash, pin_hash, is_verified, private_token, flagged_count, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10)`
-  ).bind(id, username, lower, await hashSecret(password), question, await hashSecret(answer.toLowerCase()), await hashSecret(pin), verified, privateToken, nowIso());
-  if (invite) {
-    await env.DB.batch([insertUser, env.DB.prepare('DELETE FROM verified_invites WHERE handle_lower = ?1').bind(lower)]);
-  } else {
-    await insertUser.run();
-  }
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, 0, ?9)`
+  ).bind(id, username, username.toLowerCase(), await hashSecret(password), question, await hashSecret(answer.toLowerCase()), await hashSecret(pin), privateToken, nowIso()).run();
 
   const token = await createSession(env, id);
   return json({ ok: true }, 200, { 'set-cookie': sessionCookie(token, isHttps(request)) });
@@ -180,6 +165,24 @@ async function recoverPin(env, request, body) {
   if (!/^\d{6}$/.test(newPin)) return json({ ok: false, error: 'The recovery PIN must be exactly 6 digits.' }, 400);
   await env.DB.prepare('UPDATE users SET pin_hash = ?1 WHERE id = ?2').bind(await hashSecret(newPin), user.id).run();
   return json({ ok: true, message: 'Recovery PIN reset. Keep your new 6-digit code safe.' });
+}
+
+/* ── "Get Verified": a signed-in member asks the admin for the badge ── */
+async function requestVerification(env, request, body) {
+  const me = await getSessionUser(request, env);
+  if (!me) return json({ ok: false, error: 'Sign in first.' }, 401);
+  if (Number(me.is_verified)) return json({ ok: false, error: 'You are already verified.' }, 400);
+  const message = String(body.message || '').trim().slice(0, 300);
+  const row = await env.DB.prepare('SELECT status, decided_at FROM verification_requests WHERE user_id = ?1').bind(me.id).first();
+  if (row && row.status === 'pending') return json({ ok: false, error: 'Your request is already pending review.' }, 409);
+  if (row && row.status === 'denied' && Date.now() - Date.parse(row.decided_at) < 7 * 86400000) {
+    return json({ ok: false, error: 'Your last request was declined. You can ask again after 7 days.' }, 429);
+  }
+  await env.DB.prepare(
+    `INSERT INTO verification_requests (user_id, message, status, created_at, decided_at) VALUES (?1, ?2, 'pending', ?3, NULL)
+     ON CONFLICT(user_id) DO UPDATE SET message = excluded.message, status = 'pending', created_at = excluded.created_at, decided_at = NULL`
+  ).bind(me.id, message, nowIso()).run();
+  return json({ ok: true });
 }
 
 /* ── comment (secondary users interact via text comments only) ── */
@@ -309,32 +312,27 @@ async function adminDispatch(env, request, body, action) {
       return json({ ok: true });
     }
 
-    /* Reserve a handle for one verified individual and mint a one-time invite code */
-    case 'admin_invite_create': {
-      const handle = String(body.username || '').trim();
-      if (!USERNAME_RE.test(handle)) return json({ ok: false, error: 'Username must be 3–24 characters (letters, numbers, underscore).' }, 400);
-      const lower = handle.toLowerCase();
-      if (RESERVED_USERNAMES.has(lower)) return json({ ok: false, error: 'That username is a system-reserved name.' }, 400);
-      const taken = await env.DB.prepare('SELECT 1 FROM users WHERE username_lower = ?1').bind(lower).first();
-      if (taken) return json({ ok: false, error: 'That username already has an account. Use the Verified toggle in the User ledger instead.' }, 409);
-      const code = makeInviteCode();
-      const note = String(body.note || '').trim().slice(0, 120);
-      await env.DB.prepare(
-        `INSERT INTO verified_invites (handle_lower, handle, code_hash, note, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
-         ON CONFLICT(handle_lower) DO UPDATE SET code_hash = excluded.code_hash, handle = excluded.handle, note = excluded.note, created_at = excluded.created_at`
-      ).bind(lower, handle, await hashSecret(normalizeInvite(code)), note, nowIso()).run();
-      return json({ ok: true, username: handle, code }); // shown once — only the hash is stored
+    /* Pending "Get Verified" requests */
+    case 'admin_verification_list': {
+      const rows = await env.DB.prepare(
+        `SELECT u.username, r.message, r.created_at FROM verification_requests r
+         JOIN users u ON u.id = r.user_id WHERE r.status = 'pending' ORDER BY r.created_at ASC LIMIT 200`
+      ).all();
+      return json({ ok: true, requests: rows.results || [] });
     }
 
-    case 'admin_invite_list': {
-      const rows = await env.DB.prepare('SELECT handle, note, created_at FROM verified_invites ORDER BY created_at DESC LIMIT 200').all();
-      return json({ ok: true, invites: rows.results || [] });
-    }
-
-    case 'admin_invite_revoke': {
-      const r = await env.DB.prepare('DELETE FROM verified_invites WHERE handle_lower = ?1').bind(String(body.username || '').trim().toLowerCase()).run();
-      if (!r.success || r.meta.changes === 0) return json({ ok: false, error: 'Invite not found.' }, 404);
-      return json({ ok: true });
+    /* Approve (sets the verified badge) or decline a request */
+    case 'admin_verification_decide': {
+      const username = String(body.username || '').trim().toLowerCase();
+      const approve = Boolean(Number(body.approve));
+      const user = await env.DB.prepare('SELECT id FROM users WHERE username_lower = ?1').bind(username).first();
+      if (!user) return json({ ok: false, error: 'User not found.' }, 404);
+      const req = await env.DB.prepare("SELECT 1 FROM verification_requests WHERE user_id = ?1 AND status = 'pending'").bind(user.id).first();
+      if (!req) return json({ ok: false, error: 'No pending request for that user.' }, 404);
+      const stmts = [env.DB.prepare('UPDATE verification_requests SET status = ?1, decided_at = ?2 WHERE user_id = ?3').bind(approve ? 'approved' : 'denied', nowIso(), user.id)];
+      if (approve) stmts.push(env.DB.prepare('UPDATE users SET is_verified = 1 WHERE id = ?1').bind(user.id));
+      await env.DB.batch(stmts);
+      return json({ ok: true, username, approved: approve });
     }
 
     /* Flagged comment patterns for the ledger */
