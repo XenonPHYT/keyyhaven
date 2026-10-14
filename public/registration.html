@@ -53,11 +53,6 @@
           <div class="pin-wrap"><input id="reg-pin" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" placeholder="••••••" required></div>
           <span class="hint">Stored hashed. If you ever forget your password, the admin can verify you and reset access.</span>
         </div>
-        <div class="field">
-          <label for="reg-invite">Invite code <span class="hint">(optional)</span></label>
-          <input id="reg-invite" type="text" maxlength="20" autocomplete="off" autocapitalize="characters" placeholder="Only if the admin gave you one">
-          <span class="hint">Verified individuals receive a private invite code that reserves their username.</span>
-        </div>
         <p class="form-msg" id="reg-msg" role="status"></p>
         <button class="btn" type="submit" id="reg-submit">Register &amp; enter the Haven</button>
       </form>
@@ -142,7 +137,6 @@ $('#register-form').addEventListener('submit', async (e) => {
     password: $('#reg-password').value,
     secret_question: $('#reg-question').value.trim(),
     secret_answer: $('#reg-answer').value.trim(),
-    invite_code: $('#reg-invite').value.trim(),
     pin
   });
   $('#reg-submit').disabled = false;
