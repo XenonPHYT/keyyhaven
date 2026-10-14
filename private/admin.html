@@ -162,9 +162,11 @@ for (const btn of document.querySelectorAll('.admin-tabs .btn')) {
 }
 
 /* ── Gate ── */
+$('#gate-msg').textContent = 'Console v1.3 loaded.';
 $('#gate-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   ADMIN_KEY = $('#gate-key').value.trim();
+  $('#gate-msg').textContent = 'Checking key…'; $('#gate-msg').className = 'form-msg';
   const r = await api('admin_auth');
   if (!r.ok) { $('#gate-msg').textContent = r.error || 'Invalid admin key.'; $('#gate-msg').className = 'form-msg error'; return; }
   sessionStorage.setItem(KEY_STORAGE, ADMIN_KEY);
