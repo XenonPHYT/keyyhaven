@@ -37,7 +37,7 @@
     <h1>Keyy's Haven Console <svg class="seal" role="img" aria-label="Verified"><use href="#seal"/></svg></h1>
     <div class="admin-tabs" role="tablist">
       <button class="btn ghost" data-tab="ledger" aria-selected="true">User ledger</button>
-      <button class="btn ghost" data-tab="invites" aria-selected="false">Verified invites</button>
+      <button class="btn ghost" data-tab="requests" aria-selected="false">Verification requests</button>
       <button class="btn ghost" data-tab="moderation" aria-selected="false">Comment moderation</button>
       <button class="btn ghost" data-tab="publisher" aria-selected="false">Publisher</button>
       <button class="btn ghost" data-tab="live" aria-selected="false">Live &amp; system</button>
@@ -66,23 +66,13 @@
     </div>
   </section>
 
-  <!-- ── VERIFIED INVITES ── -->
-  <section class="card card-pad admin-pane" id="pane-invites">
-    <h3>Reserve a username for a verified person</h3>
-    <p class="mini-note" style="margin-bottom:12px">Pick the handle she wants. Nobody else can register it. Give her the one-time code privately; when she registers that username with the code, her account is created verified.</p>
-    <div class="field" style="max-width:340px">
-      <label for="inv-user">Handle</label>
-      <input id="inv-user" type="text" maxlength="24" placeholder="e.g. her_handle">
-      <label for="inv-note" style="margin-top:8px">Note (optional, admin only)</label>
-      <input id="inv-note" type="text" maxlength="120" placeholder="Who this is for">
-      <button class="btn small" id="inv-btn">Create invite code</button>
-    </div>
-    <p class="form-msg" id="inv-out" role="status" style="font-size:16px;margin-top:10px;user-select:all"></p>
-    <hr class="divider">
-    <h3>Pending invites</h3>
+  <!-- ── VERIFICATION REQUESTS ── -->
+  <section class="card card-pad admin-pane" id="pane-requests">
+    <h3>Pending “Get Verified” requests</h3>
+    <p class="mini-note" style="margin-bottom:12px">Members ask for the badge from the timeline. Approve to give the blue seal, or decline. You can also toggle verification directly from the User ledger.</p>
     <div class="table-wrap">
-      <table class="data-table" id="invites-table">
-        <thead><tr><th>Handle</th><th>Note</th><th>Created</th><th>Action</th></tr></thead>
+      <table class="data-table" id="requests-table">
+        <thead><tr><th>Username</th><th>Message</th><th>Requested</th><th>Action</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -185,7 +175,7 @@ for (const btn of document.querySelectorAll('.admin-tabs .btn')) {
 }
 
 /* ── Gate ── */
-$('#gate-msg').textContent = 'Console v1.5 loaded.';
+$('#gate-msg').textContent = 'Console v1.6 loaded.';
 $('#gate-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   ADMIN_KEY = $('#gate-key').value.trim();
@@ -306,40 +296,31 @@ $('#live-off-btn').addEventListener('click', async () => {
   $('#live-switch').checked = false; loadLive(); toast('Stream ended.');
 });
 
-/* ── Verified invites ── */
-async function loadInvites() {
-  const r = await api('admin_invite_list');
-  const tb = $('#invites-table tbody');
-  if (!r.ok) { tb.innerHTML = `<tr><td colspan="4">${esc(r.error || 'Failed to load invites.')}</td></tr>`; return; }
-  tb.innerHTML = r.invites.map((i) => `
+/* ── Verification requests ── */
+async function loadRequests() {
+  const r = await api('admin_verification_list');
+  const tb = $('#requests-table tbody');
+  if (!r.ok) { tb.innerHTML = `<tr><td colspan="4">${esc(r.error || 'Failed to load requests.')}</td></tr>`; return; }
+  tb.innerHTML = r.requests.map((q) => `
     <tr>
-      <td><b>${esc(i.handle)}</b></td>
-      <td>${esc(i.note || '—')}</td>
-      <td>${esc((i.created_at || '').slice(0, 10))}</td>
-      <td><button class="btn small danger" data-revoke="${esc(i.handle)}">Revoke</button></td>
-    </tr>`).join('') || '<tr><td colspan="4">No pending invites.</td></tr>';
-  for (const b of tb.querySelectorAll('[data-revoke]')) b.addEventListener('click', async () => {
-    const x = await api('admin_invite_revoke', { username: b.dataset.revoke });
-    toast(x.ok ? 'Invite revoked.' : (x.error || 'Failed.'));
-    loadInvites();
-  });
+      <td><b>${esc(q.username)}</b></td>
+      <td style="max-width:320px">${esc(q.message || '—')}</td>
+      <td>${esc((q.created_at || '').slice(0, 10))}</td>
+      <td style="white-space:nowrap">
+        <button class="btn small" data-approve="${esc(q.username)}">Approve</button>
+        <button class="btn small danger" data-deny="${esc(q.username)}">Decline</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="4">No pending requests.</td></tr>';
+  const decide = async (username, approve) => {
+    const x = await api('admin_verification_decide', { username, approve: approve ? 1 : 0 });
+    toast(x.ok ? (approve ? 'Verified ✓' : 'Request declined.') : (x.error || 'Failed.'));
+    loadRequests(); loadUsers();
+  };
+  for (const b of tb.querySelectorAll('[data-approve]')) b.addEventListener('click', () => decide(b.dataset.approve, true));
+  for (const b of tb.querySelectorAll('[data-deny]')) b.addEventListener('click', () => decide(b.dataset.deny, false));
 }
-$('#inv-btn').addEventListener('click', async () => {
-  const username = $('#inv-user').value.trim();
-  if (!username) return toast('Enter a handle first.');
-  const r = await api('admin_invite_create', { username, note: $('#inv-note').value });
-  const out = $('#inv-out');
-  if (r.ok) {
-    out.textContent = 'Code for ' + r.username + ': ' + r.code + '  (shown once — copy it now)';
-    out.className = 'form-msg success';
-    $('#inv-user').value = ''; $('#inv-note').value = '';
-    loadInvites();
-  } else {
-    out.textContent = r.error || 'Failed.'; out.className = 'form-msg error';
-  }
-});
 
-function refreshAll() { loadUsers(); loadComments(); loadLive(); loadInvites(); }
+function refreshAll() { loadUsers(); loadComments(); loadLive(); loadRequests(); }
 
 /* Auto-resume if a key is already in sessionStorage */
 if (ADMIN_KEY) {
