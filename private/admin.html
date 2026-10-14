@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Keyy's Haven — Admin Console</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="/media/avatar.webp">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="seal" viewBox="0 0 24 24">
+    <path fill="var(--verified-blue)" d="M12.0 0.8 L14.38 3.11 L17.6 2.3 L18.51 5.49 L21.7 6.4 L20.89 9.62 L23.2 12.0 L20.89 14.38 L21.7 17.6 L18.51 18.51 L17.6 21.7 L14.38 20.89 L12.0 23.2 L9.62 20.89 L6.4 21.7 L5.49 18.51 L2.3 17.6 L3.11 14.38 L0.8 12.0 L3.11 9.62 L2.3 6.4 L5.49 5.49 L6.4 2.3 L9.62 3.11 Z"/>
+    <path fill="#ffffff" d="M10.6 15.9 L7.2 12.5 L8.6 11.1 L10.6 13.1 L15.4 8.3 L16.8 9.7 Z"/>
+  </symbol>
+</svg>
+
+<!-- Hidden backend gate: the ADMIN_KEY is verified server-side on every request -->
+<div class="gate-shell" id="gate">
+  <form class="card card-pad gate-panel" id="gate-form">
+    <h1>🔒 Keyy's Haven — Backend Console</h1>
+    <p>Direct-access panel. Enter the environment admin master key (<code>ADMIN_KEY</code>) to unlock the real-time ledger. The key is verified on every API call server-side.</p>
+    <div class="field">
+      <label for="gate-key">Admin master key</label>
+      <input id="gate-key" type="password" autocomplete="off" required>
+    </div>
+    <p class="form-msg" id="gate-msg" role="status"></p>
+    <button class="btn" type="submit" id="gate-btn">Unlock console</button>
+    <p class="mini-note"><a href="/">← Back to the timeline</a></p>
+  </form>
+</div>
+
+<!-- Hidden backend panel -->
+<main class="admin-shell" id="console" hidden>
+  <div class="admin-top">
+    <h1>Keyy's Haven Console <svg class="seal" role="img" aria-label="Verified"><use href="#seal"/></svg></h1>
+    <div class="admin-tabs" role="tablist">
+      <button class="btn ghost" data-tab="ledger" aria-selected="true">User ledger</button>
+      <button class="btn ghost" data-tab="moderation" aria-selected="false">Comment moderation</button>
+      <button class="btn ghost" data-tab="publisher" aria-selected="false">Publisher</button>
+      <button class="btn ghost" data-tab="live" aria-selected="false">Live &amp; system</button>
+    </div>
+  </div>
+
+  <!-- ── USER LEDGER ── -->
+  <section class="card card-pad admin-pane active" id="pane-ledger">
+    <h3>Real-time user ledger</h3>
+    <div class="field" style="max-width:340px;margin-bottom:12px">
+      <input id="user-filter" type="text" placeholder="Scan &amp; filter public usernames…">
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="users-table">
+        <thead><tr><th>Username</th><th>Verified</th><th>Flagged</th><th>Joined</th><th>Force-reset PIN</th><th>Private token</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <hr class="divider">
+    <h3>Owner tools</h3>
+    <div class="field" style="max-width:340px">
+      <label for="keyy-pass">Provision / reset the Keyy owner password</label>
+      <input id="keyy-pass" type="password" placeholder="New owner password (min 8 chars)">
+      <button class="btn small" id="keyy-btn">Provision Keyy account</button>
+      <p class="hint">Creates the verified owner (displayed as “Keyy Haven Official”) on first run, or rotates the password.</p>
+    </div>
+  </section>
+
+  <!-- ── COMMENT MODERATION ── -->
+  <section class="card card-pad admin-pane" id="pane-moderation">
+    <h3>Flagged comment patterns &amp; moderation</h3>
+    <div class="table-wrap">
+      <table class="data-table" id="comments-table">
+        <thead><tr><th>User</th><th>Comment</th><th>Status</th><th>Pattern</th><th>Posted</th><th>Action</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── PUBLISHER ── -->
+  <section class="card card-pad admin-pane" id="pane-publisher">
+    <h3>Broadcast publisher</h3>
+    <p class="mini-note" style="margin-bottom:12px">Only two authorities may post to the timeline: <b>Keyy</b> (“Keyy Haven Official”) and the <b>System Assistant</b>.</p>
+    <form class="form-grid" id="publish-form" style="max-width:640px">
+      <div class="field">
+        <label for="pub-author">Author</label>
+        <select id="pub-author">
+          <option value="keyy">Keyy Haven Official (owner)</option>
+          <option value="platform">System Assistant (automated broadcasts)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="pub-body">Post body</label>
+        <textarea id="pub-body" maxlength="4000" required></textarea>
+      </div>
+      <div class="field">
+        <label for="pub-media">R2 WebP asset paths (comma separated)</label>
+        <input id="pub-media" type="text" placeholder="media/drop-01.webp, media/drop-02.webp">
+        <span class="hint">Paths are stored as a text-serialized JSON array and served from the R2 vault at /media/…</span>
+      </div>
+      <label class="switch" title="Pin to top">
+        <input type="checkbox" id="pub-pinned"><span class="track"></span>
+      </label>
+      <p class="form-msg" id="pub-msg" role="status"></p>
+      <button class="btn" type="submit" id="pub-btn">Publish to timeline</button>
+    </form>
+  </section>
+
+  <!-- ── LIVE & SYSTEM ── -->
+  <section class="card card-pad admin-pane" id="pane-live">
+    <h3>Live stream indicator</h3>
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <label class="switch" title="Master live switch">
+        <input type="checkbox" id="live-switch"><span class="track"></span>
+      </label>
+      <span id="live-state" class="badge-pill">…</span>
+      <button class="btn small danger" id="live-off-btn">Force end stream</button>
+    </div>
+    <p class="hint" style="margin-top:10px">Synchronized with server webhooks: <code>POST /api?action=live_webhook</code> with the admin key flips the pulsing indicator for every visitor. Toggling here does the same.</p>
+    <hr class="divider">
+    <h3>System</h3>
+    <p class="mini-note" id="sys-info">Loading system stats…</p>
+    <p class="mini-note">Share links minted by the Share button are short-lived cryptographic hashes mapped to posts in the <code>share_tokens</code> register and expire automatically.</p>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module">
+const $ = (s) => document.querySelector(s);
+const KEY_STORAGE = 'haven_admin_key';
+let ADMIN_KEY = sessionStorage.getItem(KEY_STORAGE) || '';
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function toast(text) {
+  const t = $('#toast'); t.textContent = text; t.classList.add('show');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+async function api(action, payload = {}) {
+  const res = await fetch('/api?action=' + encodeURIComponent(action), {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, admin_key: ADMIN_KEY, ...payload })
+  });
+  return res.json();
+}
+
+/* Tabs */
+for (const btn of document.querySelectorAll('.admin-tabs .btn')) {
+  btn.addEventListener('click', () => {
+    for (const b of document.querySelectorAll('.admin-tabs .btn')) b.setAttribute('aria-selected', String(b === btn));
+    for (const p of document.querySelectorAll('.admin-pane')) p.classList.remove('active');
+    $('#pane-' + btn.dataset.tab).classList.add('active');
+  });
+}
+
+/* ── Gate ── */
+$('#gate-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  ADMIN_KEY = $('#gate-key').value;
+  const r = await api('admin_auth');
+  if (!r.ok) { $('#gate-msg').textContent = r.error || 'Invalid admin key.'; $('#gate-msg').className = 'form-msg error'; return; }
+  sessionStorage.setItem(KEY_STORAGE, ADMIN_KEY);
+  $('#gate').hidden = true; $('#console').hidden = false;
+  refreshAll();
+});
+
+/* ── Ledger ── */
+async function loadUsers() {
+  const q = $('#user-filter').value.trim();
+  const r = await api('admin_list_users', { query: q });
+  const tb = $('#users-table tbody');
+  if (!r.ok) { tb.innerHTML = `<tr><td colspan="6">${esc(r.error || 'Failed to load users.')}</td></tr>`; return; }
+  tb.innerHTML = r.users.map((u) => `
+    <tr>
+      <td><b>${esc(u.username)}</b>${u.is_verified ? ' <svg class="seal" style="width:14px;height:14px;vertical-align:-2px" role="img" aria-label="Verified"><use href="#seal"/></svg>' : ''}</td>
+      <td>
+        <label class="switch" title="Dynamic verification engine — grant / revoke the official badge">
+          <input type="checkbox" data-verify-user="${esc(u.username)}" ${u.is_verified ? 'checked' : ''}><span class="track"></span>
+        </label>
+      </td>
+      <td>${u.flagged_count ? `<span class="badge-pill flag">⚑ ${u.flagged_count}</span>` : '<span class="badge-pill">0</span>'}</td>
+      <td>${esc((u.created_at || '').slice(0, 10))}</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <input type="text" inputmode="numeric" maxlength="6" placeholder="6-digit PIN" style="width:120px" data-pin-for="${esc(u.username)}">
+          <button class="btn small" data-reset-pin="${esc(u.username)}">Reset</button>
+        </div>
+      </td>
+      <td>
+        <button class="btn small ghost" data-reveal="${esc(u.username)}">Reveal token</button>
+        <code class="hint" data-token-out="${esc(u.username)}" hidden></code>
+      </td>
+    </tr>`).join('');
+
+  for (const sw of tb.querySelectorAll('[data-verify-user]')) sw.addEventListener('change', async () => {
+    const r2 = await api('admin_set_verified', { username: sw.dataset.verifyUser, verified: sw.checked ? 1 : 0 });
+    if (!r2.ok) { toast(r2.error || 'Verification switch failed.'); sw.checked = !sw.checked; }
+    else toast(`${sw.dataset.verifyUser} is now ${sw.checked ? 'VERIFIED ✓ (badge live across the whole app)' : 'un-verified'}.`);
+  });
+  for (const b of tb.querySelectorAll('[data-reset-pin]')) b.addEventListener('click', async () => {
+    const input = tb.querySelector(`[data-pin-for="${CSS.escape(b.dataset.resetPin)}"]`);
+    const pin = input.value.trim();
+    if (!/^\d{6}$/.test(pin)) return toast('PIN must be exactly 6 digits.');
+    const r2 = await api('admin_reset_pin', { username: b.dataset.resetPin, new_pin: pin });
+    toast(r2.ok ? 'PIN force-reset & stored hashed.' : (r2.error || 'Reset failed.'));
+    if (r2.ok) input.value = '';
+  });
+  for (const b of tb.querySelectorAll('[data-reveal]')) b.addEventListener('click', async () => {
+    const out = tb.querySelector(`[data-token-out="${CSS.escape(b.dataset.reveal)}"]`);
+    const r2 = await api('admin_reveal_token', { username: b.dataset.reveal });
+    if (!r2.ok) return toast(r2.error || 'Failed.');
+    out.textContent = r2.private_token; out.hidden = false;
+  });
+}
+$('#user-filter').addEventListener('input', () => { clearTimeout(loadUsers.t); loadUsers.t = setTimeout(loadUsers, 300); });
+$('#keyy-btn').addEventListener('click', async () => {
+  const pass = $('#keyy-pass').value;
+  if (pass.length < 8) return toast('Owner password must be at least 8 characters.');
+  const r = await api('admin_provision_keyy', { password: pass });
+  toast(r.ok ? 'Keyy owner account provisioned (verified ✓).' : (r.error || 'Failed.'));
+  if (r.ok) $('#keyy-pass').value = '';
+});
+
+/* ── Moderation ── */
+async function loadComments() {
+  const r = await api('admin_flagged');
+  const tb = $('#comments-table tbody');
+  if (!r.ok) { tb.innerHTML = `<tr><td colspan="6">${esc(r.error || 'Failed to load.')}</td></tr>`; return; }
+  tb.innerHTML = r.comments.map((c) => `
+    <tr>
+      <td><b>${esc(c.username)}</b></td>
+      <td style="max-width:420px">${esc(c.body)}</td>
+      <td><span class="badge-pill ${c.status === 'active' ? '' : 'flag'}">${esc(c.status)}</span></td>
+      <td>${c.flag_reason ? `<span class="badge-pill flag">${esc(c.flag_reason)}</span>` : '—'}</td>
+      <td>${esc((c.created_at || '').slice(0, 16).replace('T', ' '))}</td>
+      <td>${c.status === 'active' ? `<button class="btn small danger" data-del="${c.id}">Soft delete</button>` : '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="6">No flagged or recent comments. Clean feed ✨</td></tr>';
+  for (const b of tb.querySelectorAll('[data-del]')) b.addEventListener('click', async () => {
+    const r2 = await api('admin_delete_comment', { comment_id: Number(b.dataset.del) });
+    toast(r2.ok ? 'Comment soft-deleted (deleted_by_admin).' : (r2.error || 'Failed.'));
+    loadComments();
+  });
+}
+
+/* ── Publisher ── */
+$('#publish-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = $('#pub-msg'); msg.textContent = 'Publishing…'; msg.className = 'form-msg';
+  const media = $('#pub-media').value.split(',').map((s) => s.trim()).filter(Boolean);
+  const r = await api('admin_publish', { author_key: $('#pub-author').value, body: $('#pub-body').value, media_paths: media, pinned: $('#pub-pinned').checked ? 1 : 0 });
+  if (r.ok) { msg.textContent = 'Broadcast live on the timeline ✓'; msg.className = 'form-msg success'; $('#pub-body').value = ''; $('#pub-media').value = ''; $('#pub-pinned').checked = false; }
+  else { msg.textContent = r.error || 'Publish failed.'; msg.className = 'form-msg error'; }
+});
+
+/* ── Live & system ── */
+async function loadLive() {
+  const r = await api('admin_site_state');
+  if (!r.ok) return;
+  const on = !!r.live;
+  $('#live-switch').checked = on;
+  $('#live-state').textContent = on ? '● LIVE NOW' : 'Offline';
+  $('#live-state').className = 'badge-pill' + (on ? ' flag' : '');
+  $('#sys-info').textContent = `Members: ${r.stats.members} · Posts: ${r.stats.posts} · Comments: ${r.stats.comments} · Flagged comments: ${r.stats.flagged} · Active share links: ${r.stats.shares}`;
+}
+$('#live-switch').addEventListener('change', async () => {
+  const r = await api('admin_toggle_live', { on: $('#live-switch').checked ? 1 : 0 });
+  if (!r.ok) { toast(r.error || 'Failed.'); $('#live-switch').checked = !$('#live-switch').checked; }
+  else toast(r.ok ? 'Live indicator synchronized.' : 'Failed.');
+  loadLive();
+});
+$('#live-off-btn').addEventListener('click', async () => {
+  await api('admin_toggle_live', { on: 0 });
+  $('#live-switch').checked = false; loadLive(); toast('Stream ended.');
+});
+
+function refreshAll() { loadUsers(); loadComments(); loadLive(); }
+
+/* Auto-resume if a key is already in sessionStorage */
+if (ADMIN_KEY) {
+  api('admin_auth').then((r) => {
+    if (r.ok) { $('#gate').hidden = true; $('#console').hidden = false; refreshAll(); }
+    else sessionStorage.removeItem(KEY_STORAGE);
+  });
+}
+</script>
+</body>
+</html>
