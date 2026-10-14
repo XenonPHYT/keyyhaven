@@ -142,7 +142,7 @@ function renderAuthCard() {
     nav.onclick = async (e) => { e.preventDefault(); await api('logout'); location.reload(); };
     card.innerHTML = `
       <h3>Your session</h3>
-      <p>Signed in as <b>${esc(ME.username)}</b>${ME.is_verified ? seal(true) : ''}</p>
+      <p class="signed-in-as">Signed in as <span class="comment-author"><span class="handle-name">@${esc(ME.username)}</span>${ME.is_verified ? seal(true) : ''}</span></p>
       <a class="nav-chip" href="/user=${encodeURIComponent(ME.username)}/ID=session">Private token node →</a>
       ${verifyHtml}
       <p class="mini-note">The private token node re-discloses your hidden verification token only inside this authenticated session. Your internal ID is never rendered anywhere public.</p>`;
@@ -185,7 +185,7 @@ function postHtml(p) {
       <div class="comment-avatar">${esc(c.username.slice(0, 1).toUpperCase())}</div>
       <div class="comment-main">
         <div class="comment-bubble">
-          <span class="comment-author">${esc(c.username)}${seal(c.verified)}</span><br>${esc(c.body)}
+          <span class="comment-author"><span class="handle-name">${c.username === 'Keyy Haven Official' ? esc(c.username) : '@' + esc(c.username)}</span>${seal(c.verified)}</span><br>${esc(c.body)}
         </div>
         <div class="comment-time">${timeAgo(c.created_at)}</div>
       </div>
@@ -201,7 +201,7 @@ function postHtml(p) {
     <div class="post-head">
       <img class="post-avatar" src="/media/avatar.webp" alt="" width="46" height="46">
       <div class="post-id">
-        <div class="post-author">${esc(p.author_name)}${seal(true)}</div>
+        <div class="post-author"><span class="handle-name">${esc(p.author_name)}</span>${seal(true)}</div>
         <div class="post-meta"><span>${timeAgo(p.created_at)}</span>${p.pinned ? '<span class="pinned-flag">📌 Pinned</span>' : ''}</div>
       </div>
     </div>

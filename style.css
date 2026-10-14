@@ -238,3 +238,9 @@ textarea { resize: vertical; min-height: 96px; }
 
 /* Make the HTML hidden attribute always win (gate/console switch relies on it) */
 [hidden] { display: none !important; }
+
+/* Verified seal sits directly beside the handle everywhere */
+.post-author, .comment-author { gap: 4px; }
+.handle-name { min-width: 0; overflow-wrap: anywhere; }
+.post-author .seal, .comment-author .seal { flex: 0 0 auto; }
+.signed-in-as .comment-author { font-size: inherit; }
