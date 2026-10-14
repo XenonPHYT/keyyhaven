@@ -124,13 +124,36 @@ function renderAuthCard() {
   const card = $('#auth-card');
   const nav = $('#nav-auth');
   if (ME) {
+    let verifyHtml = '';
+    if (!ME.is_verified) {
+      if (ME.verification === 'pending') {
+        verifyHtml = '<p class="mini-note">⏳ Your verification request is pending review.</p>';
+      } else {
+        verifyHtml = `
+          <div class="field" style="margin-top:12px">
+            <textarea id="verify-note" maxlength="300" placeholder="Who are you? (optional — helps the admin verify you)"></textarea>
+          </div>
+          <button class="btn small" id="verify-btn">Get Verified</button>
+          ${ME.verification === 'denied' ? '<p class="mini-note">Your last request was declined. You can ask again after 7 days.</p>' : ''}
+          <p class="form-msg" id="verify-msg"></p>`;
+      }
+    }
     nav.textContent = 'Sign out';
     nav.onclick = async (e) => { e.preventDefault(); await api('logout'); location.reload(); };
     card.innerHTML = `
       <h3>Your session</h3>
       <p>Signed in as <b>${esc(ME.username)}</b>${ME.is_verified ? seal(true) : ''}</p>
       <a class="nav-chip" href="/user=${encodeURIComponent(ME.username)}/ID=session">Private token node →</a>
+      ${verifyHtml}
       <p class="mini-note">The private token node re-discloses your hidden verification token only inside this authenticated session. Your internal ID is never rendered anywhere public.</p>`;
+    const vb = $('#verify-btn');
+    if (vb) vb.addEventListener('click', async () => {
+      const msg = $('#verify-msg');
+      msg.textContent = 'Sending…'; msg.className = 'form-msg';
+      const r = await api('request_verification', { message: $('#verify-note').value });
+      if (r.ok) { toast('Request sent — the admin will review it.'); ME.verification = 'pending'; renderAuthCard(); }
+      else { msg.textContent = r.error || 'Could not send the request.'; msg.className = 'form-msg error'; }
+    });
   } else {
     nav.textContent = 'Join the Haven';
     nav.onclick = null;
