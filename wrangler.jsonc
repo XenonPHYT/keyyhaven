@@ -2,30 +2,25 @@
   "name": "keyyhaven",
   "main": "src/index.js",
   "compatibility_date": "2026-10-14",
+  "keep_vars": true,
 
-  // Static assets (HTML/CSS/WebP) served by the same Worker
   "assets": {
     "directory": "./",
     "binding": "ASSETS",
     "run_worker_first": ["/api", "/api/*", "/share/*", "/media/*", "/user=*"]
   },
 
-  // D1 database — paste your real database id below
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "keyys-haven-db",
-      "database_id": "6a804cdf-92ce-46bd-9bc4-17e2d7c6d0fb"
+      "database_id": "PASTE_YOUR_REAL_D1_ID_HERE"
     }
   ],
 
-  // R2 bucket for media
   "r2_buckets": [
     { "binding": "MEDIA", "bucket_name": "keyys-haven-media" }
   ],
 
-  // Daily cleanup job (03:00 UTC)
   "triggers": { "crons": ["0 3 * * *"] }
-
-  // Secret (do not put here): set ADMIN_KEY in Dashboard → Worker → Settings → Variables and Secrets
 }
